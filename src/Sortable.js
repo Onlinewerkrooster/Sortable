@@ -96,6 +96,7 @@ if (typeof window === "undefined" || !window.document) {
 	throw new Error("Sortable.js requires a window with a document");
 }
 
+var lastCheckedSortableCode = '0-0-0';
 let dragEl,
 	parentEl,
 	ghostEl,
@@ -223,20 +224,21 @@ let dragEl,
 	 * @return {HTMLElement}   Element of the first found nearest Sortable
 	 */
 	_detectNearestEmptySortable = function(x, y) {
-		let ret;
-		sortables.some((sortable) => {
-			if (lastChild(sortable)) return;
+		return sortables[0];
+		// let ret;
+		// sortables.some((sortable) => {
+		// 	if (lastChild(sortable)) return;
 
-			let rect = getRect(sortable),
-				threshold = sortable[expando].options.emptyInsertThreshold,
-				insideHorizontally = x >= (rect.left - threshold) && x <= (rect.right + threshold),
-				insideVertically = y >= (rect.top - threshold) && y <= (rect.bottom + threshold);
+		// 	let rect = getRect(sortable),
+		// 		threshold = sortable[expando].options.emptyInsertThreshold,
+		// 		insideHorizontally = x >= (rect.left - threshold) && x <= (rect.right + threshold),
+		// 		insideVertically = y >= (rect.top - threshold) && y <= (rect.bottom + threshold);
 
-			if (threshold && insideHorizontally && insideVertically) {
-				return (ret = sortable);
-			}
-		});
-		return ret;
+		// 	if (threshold && insideHorizontally && insideVertically) {
+		// 		return (ret = sortable);
+		// 	}
+		// });
+		// return ret;
 	},
 
 	_prepareGroup = function (options) {
@@ -966,6 +968,20 @@ Sortable.prototype = /** @lends Sortable.prototype */ {
 			vertical,
 			_this = this,
 			completedFired = false;
+
+		if (lastCheckedSortableCode == el.getAttribute('data-uniqueid')) {
+			//console.log("STOP IT");
+			return false;
+			}
+			lastCheckedSortableCode = el.getAttribute('data-uniqueid');
+			try {
+			if (el.firstChild.classList.contains('default-worktime')) {
+				return false;
+			}
+			} catch(e) {
+	
+			}
+			console.log("GO FOR IT");
 
 		if (_silent) return;
 
