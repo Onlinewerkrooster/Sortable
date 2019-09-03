@@ -17,7 +17,7 @@ const drop = function({
 
 	if (toSortable && !toSortable.el.contains(target)) {
 		dispatchSortableEvent('spill');
-		this.onSpill(dragEl);
+		this.onSpill({ dragEl, putSortable });
 	}
 };
 
@@ -28,9 +28,12 @@ Revert.prototype = {
 	dragStart({ oldDraggableIndex }) {
 		this.startIndex = oldDraggableIndex;
 	},
-	onSpill(dragEl) {
+	onSpill({ dragEl, putSortable }) {
 		this.sortable.captureAnimationState();
-		let nextSibling = getChild(this.sortable.el, this.startIndex, this.sortable.options);
+		if (putSortable) {
+			putSortable.captureAnimationState();
+		}
+		let nextSibling = getChild(this.sortable.el, this.startIndex, this.options);
 
 		if (nextSibling) {
 			this.sortable.el.insertBefore(dragEl, nextSibling);
@@ -38,6 +41,9 @@ Revert.prototype = {
 			this.sortable.el.appendChild(dragEl);
 		}
 		this.sortable.animateAll();
+		if (putSortable) {
+			putSortable.animateAll();
+		}
 	},
 	drop
 };
@@ -50,10 +56,11 @@ Object.assign(Revert, {
 function Remove() {}
 
 Remove.prototype = {
-	onSpill(dragEl) {
-		this.sortable.captureAnimationState();
+	onSpill({ dragEl, putSortable }) {
+		const parentSortable = putSortable || this.sortable;
+		parentSortable.captureAnimationState();
 		dragEl.parentNode && dragEl.parentNode.removeChild(dragEl);
-		this.sortable.animateAll();
+		parentSortable.animateAll();
 	},
 	drop
 };

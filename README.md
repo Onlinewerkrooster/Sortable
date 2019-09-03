@@ -1,10 +1,10 @@
-# Sortable &nbsp; [![DeepScan grade](https://deepscan.io/api/teams/3901/projects/5666/branches/43977/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=3901&pid=5666&bid=43977) [![](https://data.jsdelivr.com/v1/package/npm/sortablejs/badge)](https://www.jsdelivr.com/package/npm/sortablejs) [![npm](https://img.shields.io/npm/v/sortablejs.svg)](https://www.npmjs.com/package/sortablejs)
+# Sortable &nbsp; [![CircleCI](https://circleci.com/gh/SortableJS/Sortable.svg?style=svg)](https://circleci.com/gh/SortableJS/Sortable) [![DeepScan grade](https://deepscan.io/api/teams/3901/projects/5666/branches/43977/badge/grade.svg)](https://deepscan.io/dashboard#view=project&tid=3901&pid=5666&bid=43977) [![](https://data.jsdelivr.com/v1/package/npm/sortablejs/badge)](https://www.jsdelivr.com/package/npm/sortablejs) [![npm](https://img.shields.io/npm/v/sortablejs.svg)](https://www.npmjs.com/package/sortablejs)
 
 Sortable is a JavaScript library for reorderable drag-and-drop lists.
 
 Demo: http://sortablejs.github.io/Sortable/
 
-Supported by [<img width="100px" src="https://user-images.githubusercontent.com/30704531/53353702-51143d00-38f3-11e9-8fe3-bff9fcf96bcd.png">](https://www.browserstack.com/)
+[<img width="250px" src="./st/saucelabs.svg">](https://saucelabs.com/)
 
 ## Features
 
@@ -284,7 +284,7 @@ Whether or not the delay should be applied only if the user is using touch (eg. 
 
 
 #### `swapThreshold` option
-Percentage of the target that the swap zone will take up, as a float between `0` and `1`. This option has nothing to do with the `swap` option.
+Percentage of the target that the swap zone will take up, as a float between `0` and `1`.
 
 [Read more](https://github.com/SortableJS/Sortable/wiki/Swap-Thresholds-and-Direction#swap-threshold)
 
@@ -295,7 +295,7 @@ Demo: http://sortablejs.github.io/Sortable#thresholds
 
 
 #### `invertSwap` option
-Set to `true` to set the swap zone to the sides of the target, for the effect of sorting "in between" items. This option has nothing to do with the `swap` option.
+Set to `true` to set the swap zone to the sides of the target, for the effect of sorting "in between" items.
 
 [Read more](https://github.com/SortableJS/Sortable/wiki/Swap-Thresholds-and-Direction#forcing-inverted-swap-zone)
 
@@ -306,7 +306,7 @@ Demo: http://sortablejs.github.io/Sortable#thresholds
 
 
 #### `invertedSwapThreshold` option
-Percentage of the target that the inverted swap zone will take up, as a float between `0` and `1`. If not given, will default to `swapThreshold`. This option has nothing to do with the `swap` option.
+Percentage of the target that the inverted swap zone will take up, as a float between `0` and `1`. If not given, will default to `swapThreshold`.
 
 [Read more](https://github.com/SortableJS/Sortable/wiki/Swap-Thresholds-and-Direction#dealing-with-swap-glitching)
 
@@ -694,7 +694,14 @@ The clone element.
 ---
 
 
-##### Sortable.mount(plugin:`...SortablePlugin|...SortablePlugin[]`)
+##### Sortable.get(element:`HTMLElement`):`Sortable`
+Get the Sortable instance on an element.
+
+
+---
+
+
+##### Sortable.mount(plugin:`...SortablePlugin|SortablePlugin[]`)
 Mounts a plugin to Sortable.
 
 
