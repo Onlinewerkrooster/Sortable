@@ -684,12 +684,17 @@ var PluginManager = {
 
   pluginEvent(eventName, sortable, evt) {
     this.eventCanceled = false;
+
+    evt.cancel = () => {
+      this.eventCanceled = true;
+    };
+
     const eventNameGlobal = eventName + 'Global';
     plugins.forEach(plugin => {
       if (!sortable[plugin.pluginName]) return; // Fire global events if it exists in this sortable
 
       if (sortable[plugin.pluginName][eventNameGlobal]) {
-        this.eventCanceled = !!sortable[plugin.pluginName][eventNameGlobal]({
+        sortable[plugin.pluginName][eventNameGlobal]({
           sortable,
           ...evt
         });
@@ -698,7 +703,7 @@ var PluginManager = {
 
 
       if (sortable.options[plugin.pluginName] && sortable[plugin.pluginName][eventName]) {
-        this.eventCanceled = this.eventCanceled || !!sortable[plugin.pluginName][eventName]({
+        sortable[plugin.pluginName][eventName]({
           sortable,
           ...evt
         });
@@ -706,15 +711,16 @@ var PluginManager = {
     });
   },
 
-  initializePlugins(sortable, el, defaults) {
+  initializePlugins(sortable, el, defaults, options) {
     plugins.forEach(plugin => {
       const pluginName = plugin.pluginName;
       if (!sortable.options[pluginName] && !plugin.initializeByDefault) return;
-      let initialized = new plugin(sortable, el);
+      let initialized = new plugin(sortable, el, sortable.options);
       initialized.sortable = sortable;
+      initialized.options = sortable.options;
       sortable[pluginName] = initialized; // Add default options from plugin
 
-      _extends(defaults, initialized.options);
+      _extends(defaults, initialized.defaults);
     });
 
     for (let option in sortable.options) {
@@ -727,14 +733,14 @@ var PluginManager = {
     }
   },
 
-  getEventOptions(name, sortable) {
-    let eventOptions = {};
+  getEventProperties(name, sortable) {
+    let eventProperties = {};
     plugins.forEach(plugin => {
-      if (typeof plugin.eventOptions !== 'function') return;
+      if (typeof plugin.eventProperties !== 'function') return;
 
-      _extends(eventOptions, plugin.eventOptions.call(sortable, name));
+      _extends(eventProperties, plugin.eventProperties.call(sortable[plugin.pluginName], name));
     });
-    return eventOptions;
+    return eventProperties;
   },
 
   modifyOption(sortable, name, value) {
@@ -766,9 +772,10 @@ function dispatchEvent({
   newDraggableIndex,
   originalEvent,
   putSortable,
-  eventOptions
+  extraEventProperties
 }) {
-  sortable = sortable || rootEl[expando];
+  sortable = sortable || rootEl && rootEl[expando];
+  if (!sortable) return;
   let evt,
       options = sortable.options,
       onName = 'on' + name.charAt(0).toUpperCase() + name.substr(1); // Support for new CustomEvent feature
@@ -793,12 +800,12 @@ function dispatchEvent({
   evt.newDraggableIndex = newDraggableIndex;
   evt.originalEvent = originalEvent;
   evt.pullMode = putSortable ? putSortable.lastPutMode : undefined;
-  let allEventOptions = { ...eventOptions,
-    ...PluginManager.getEventOptions(name, sortable)
+  let allEventProperties = { ...extraEventProperties,
+    ...PluginManager.getEventProperties(name, sortable)
   };
 
-  for (let option in allEventOptions) {
-    evt[option] = allEventOptions[option];
+  for (let option in allEventProperties) {
+    evt[option] = allEventProperties[option];
   }
 
   if (rootEl) {
@@ -938,7 +945,7 @@ supportDraggable = !ChromeForAndroid && !IOS && 'draggable' in document.createEl
     return elCSS.gridTemplateColumns.split(' ').length <= 1 ? 'vertical' : 'horizontal';
   }
 
-  if (child1 && firstChildCSS.float !== 'none') {
+  if (child1 && firstChildCSS.float && firstChildCSS.float !== 'none') {
     let touchingSideChild2 = firstChildCSS.float === 'left' ? 'left' : 'right';
     return child2 && (secondChildCSS.clear === 'both' || secondChildCSS.clear === touchingSideChild2) ? 'vertical' : 'horizontal';
   }
@@ -1982,7 +1989,8 @@ Sortable.prototype =
     newDraggableIndex = index(dragEl, options.draggable);
     pluginEvent('drop', this, {
       evt
-    }); // Get again after plugin event
+    });
+    parentEl = dragEl && dragEl.parentNode; // Get again after plugin event
 
     newIndex = index(dragEl);
     newDraggableIndex = index(dragEl, options.draggable);
@@ -2509,9 +2517,19 @@ Sortable.utils = {
   getChild: getChild
 };
 /**
+ * Get the Sortable instance of an element
+ * @param  {HTMLElement} element The element
+ * @return {Sortable|undefined}         The instance of Sortable
+ */
+
+Sortable.get = function (element) {
+  return element[expando];
+};
+/**
  * Mount a plugin to Sortable
  * @param  {...SortablePlugin|SortablePlugin[]} plugins       Plugins being mounted
  */
+
 
 Sortable.mount = function (...plugins) {
   if (plugins[0].constructor === Array) plugins = plugins[0];
@@ -2551,7 +2569,7 @@ let autoScrolls = [],
 
 function AutoScrollPlugin() {
   function AutoScroll() {
-    this.options = {
+    this.defaults = {
       scroll: true,
       scrollSensitivity: 30,
       scrollSpeed: 10,
@@ -2572,7 +2590,7 @@ function AutoScrollPlugin() {
       if (this.sortable.nativeDraggable) {
         on(document, 'dragover', this._handleAutoScroll);
       } else {
-        if (this.sortable.options.supportPointer) {
+        if (this.options.supportPointer) {
           on(document, 'pointermove', this._handleFallbackAutoScroll);
         } else if (originalEvent.touches) {
           on(document, 'touchmove', this._handleFallbackAutoScroll);
@@ -2586,7 +2604,7 @@ function AutoScrollPlugin() {
       originalEvent
     }) {
       // For when bubbling is canceled and using fallback (fallback 'touchmove' always reached)
-      if (!this.sortable.options.dragOverBubble && !originalEvent.rootEl) {
+      if (!this.options.dragOverBubble && !originalEvent.rootEl) {
         this._handleAutoScroll(originalEvent);
       }
     },
@@ -2615,8 +2633,8 @@ function AutoScrollPlugin() {
     },
 
     _handleAutoScroll(evt, fallback) {
-      const x = evt.clientX,
-            y = evt.clientY,
+      const x = (evt.touches ? evt.touches[0] : evt).clientX,
+            y = (evt.touches ? evt.touches[0] : evt).clientY,
             elem = document.elementFromPoint(x, y);
       touchEvt$1 = evt; // IE does not seem to have native autoscroll,
       // Edge's autoscroll seems too conditional,
@@ -2646,7 +2664,7 @@ function AutoScrollPlugin() {
         }
       } else {
         // if DnD is enabled (and browser has good autoscrolling), first autoscroll will already scroll, so get parent autoscroll of first autoscroll
-        if (!this.sortable.options.bubbleScroll || getParentAutoScrollElement(elem, true) === getWindowScrollingElement()) {
+        if (!this.options.bubbleScroll || getParentAutoScrollElement(elem, true) === getWindowScrollingElement()) {
           clearAutoScrolls();
           return;
         }
@@ -2676,7 +2694,9 @@ function clearPointerElemChangedInterval() {
 const autoScroll = throttle(function (evt, options, rootEl, isFallback) {
   // Bug: https://bugzilla.mozilla.org/show_bug.cgi?id=505521
   if (!options.scroll) return;
-  const sens = options.scrollSensitivity,
+  const x = (evt.touches ? evt.touches[0] : evt).clientX,
+        y = (evt.touches ? evt.touches[0] : evt).clientY,
+        sens = options.scrollSensitivity,
         speed = options.scrollSpeed,
         winScroller = getWindowScrollingElement();
   let scrollThisInstance = false,
@@ -2721,8 +2741,8 @@ const autoScroll = throttle(function (evt, options, rootEl, isFallback) {
       canScrollY = height < scrollHeight && (elCSS.overflowY === 'auto' || elCSS.overflowY === 'scroll');
     }
 
-    let vx = canScrollX && (Math.abs(right - evt.clientX) <= sens && scrollPosX + width < scrollWidth) - (Math.abs(left - evt.clientX) <= sens && !!scrollPosX);
-    let vy = canScrollY && (Math.abs(bottom - evt.clientY) <= sens && scrollPosY + height < scrollHeight) - (Math.abs(top - evt.clientY) <= sens && !!scrollPosY);
+    let vx = canScrollX && (Math.abs(right - x) <= sens && scrollPosX + width < scrollWidth) - (Math.abs(left - x) <= sens && !!scrollPosX);
+    let vy = canScrollY && (Math.abs(bottom - y) <= sens && scrollPosY + height < scrollHeight) - (Math.abs(top - y) <= sens && !!scrollPosY);
 
     if (!autoScrolls[layersOut]) {
       for (let i = 0; i <= layersOut; i++) {
@@ -2787,7 +2807,10 @@ const drop = function ({
 
   if (toSortable && !toSortable.el.contains(target)) {
     dispatchSortableEvent('spill');
-    this.onSpill(dragEl);
+    this.onSpill({
+      dragEl,
+      putSortable
+    });
   }
 };
 
@@ -2802,9 +2825,17 @@ Revert.prototype = {
     this.startIndex = oldDraggableIndex;
   },
 
-  onSpill(dragEl) {
+  onSpill({
+    dragEl,
+    putSortable
+  }) {
     this.sortable.captureAnimationState();
-    let nextSibling = getChild(this.sortable.el, this.startIndex, this.sortable.options);
+
+    if (putSortable) {
+      putSortable.captureAnimationState();
+    }
+
+    let nextSibling = getChild(this.sortable.el, this.startIndex, this.options);
 
     if (nextSibling) {
       this.sortable.el.insertBefore(dragEl, nextSibling);
@@ -2813,6 +2844,10 @@ Revert.prototype = {
     }
 
     this.sortable.animateAll();
+
+    if (putSortable) {
+      putSortable.animateAll();
+    }
   },
 
   drop
@@ -2825,10 +2860,14 @@ _extends(Revert, {
 function Remove() {}
 
 Remove.prototype = {
-  onSpill(dragEl) {
-    this.sortable.captureAnimationState();
+  onSpill({
+    dragEl,
+    putSortable
+  }) {
+    const parentSortable = putSortable || this.sortable;
+    parentSortable.captureAnimationState();
     dragEl.parentNode && dragEl.parentNode.removeChild(dragEl);
-    this.sortable.animateAll();
+    parentSortable.animateAll();
   },
 
   drop
@@ -2842,7 +2881,7 @@ let lastSwapEl;
 
 function SwapPlugin() {
   function Swap() {
-    this.options = {
+    this.defaults = {
       swapClass: 'sortable-swap-highlight'
     };
   }
@@ -2859,11 +2898,12 @@ function SwapPlugin() {
       target,
       onMove,
       activeSortable,
-      changed
+      changed,
+      cancel
     }) {
       if (!activeSortable.options.swap) return;
       let el = this.sortable.el,
-          options = this.sortable.options;
+          options = this.options;
 
       if (target && target !== el) {
         let prevSwapEl = lastSwapEl;
@@ -2881,7 +2921,8 @@ function SwapPlugin() {
       }
 
       changed();
-      return completed(true);
+      completed(true);
+      cancel();
     },
 
     drop({
@@ -2890,7 +2931,7 @@ function SwapPlugin() {
       dragEl
     }) {
       let toSortable = putSortable || this.sortable;
-      let options = this.sortable.options;
+      let options = this.options;
       lastSwapEl && toggleClass(lastSwapEl, options.swapClass, false);
 
       if (lastSwapEl && (options.swap || putSortable && putSortable.options.swap)) {
@@ -2912,7 +2953,7 @@ function SwapPlugin() {
   return _extends(Swap, {
     pluginName: 'swap',
 
-    eventOptions() {
+    eventProperties() {
       return {
         swapItem: lastSwapEl
       };
@@ -2970,7 +3011,7 @@ function MultiDragPlugin() {
 
     on(document, 'keydown', this._checkKeyDown);
     on(document, 'keyup', this._checkKeyUp);
-    this.options = {
+    this.defaults = {
       selectedClass: 'sortable-selected',
       multiDragKey: null,
 
@@ -3006,7 +3047,8 @@ function MultiDragPlugin() {
     },
 
     setupClone({
-      sortable
+      sortable,
+      cancel
     }) {
       if (!this.isMultiDrag) return;
 
@@ -3015,34 +3057,36 @@ function MultiDragPlugin() {
         multiDragClones[i].sortableIndex = multiDragElements[i].sortableIndex;
         multiDragClones[i].draggable = false;
         multiDragClones[i].style['will-change'] = '';
-        toggleClass(multiDragClones[i], sortable.options.selectedClass, false);
-        multiDragElements[i] === dragEl$1 && toggleClass(multiDragClones[i], sortable.options.chosenClass, false);
+        toggleClass(multiDragClones[i], this.options.selectedClass, false);
+        multiDragElements[i] === dragEl$1 && toggleClass(multiDragClones[i], this.options.chosenClass, false);
       }
 
       sortable._hideClone();
 
-      return true;
+      cancel();
     },
 
     clone({
       sortable,
       rootEl,
-      dispatchSortableEvent
+      dispatchSortableEvent,
+      cancel
     }) {
       if (!this.isMultiDrag) return;
 
-      if (!sortable.options.removeCloneOnHide) {
+      if (!this.options.removeCloneOnHide) {
         if (multiDragElements.length && multiDragSortable === sortable) {
           insertMultiDragClones(true, rootEl);
           dispatchSortableEvent('clone');
-          return true;
+          cancel();
         }
       }
     },
 
     showClone({
       cloneNowShown,
-      rootEl
+      rootEl,
+      cancel
     }) {
       if (!this.isMultiDrag) return;
       insertMultiDragClones(false, rootEl);
@@ -3051,24 +3095,25 @@ function MultiDragPlugin() {
       });
       cloneNowShown();
       clonesHidden = false;
-      return true;
+      cancel();
     },
 
     hideClone({
       sortable,
-      cloneNowHidden
+      cloneNowHidden,
+      cancel
     }) {
       if (!this.isMultiDrag) return;
       multiDragClones.forEach(clone => {
         css(clone, 'display', 'none');
 
-        if (sortable.options.removeCloneOnHide && clone.parentNode) {
+        if (this.options.removeCloneOnHide && clone.parentNode) {
           clone.parentNode.removeChild(clone);
         }
       });
       cloneNowHidden();
       clonesHidden = true;
-      return true;
+      cancel();
     },
 
     dragStartGlobal({
@@ -3093,7 +3138,7 @@ function MultiDragPlugin() {
     }) {
       if (!this.isMultiDrag) return;
 
-      if (sortable.options.sort) {
+      if (this.options.sort) {
         // Capture rects,
         // hide multi drag elements (by positioning them absolute),
         // set multi drag elements rects to dragRect,
@@ -3102,7 +3147,7 @@ function MultiDragPlugin() {
         // unset rects & remove from DOM
         sortable.captureAnimationState();
 
-        if (sortable.options.animation) {
+        if (this.options.animation) {
           multiDragElements.forEach(multiDragElement => {
             if (multiDragElement === dragEl$1) return;
             css(multiDragElement, 'position', 'absolute');
@@ -3117,18 +3162,18 @@ function MultiDragPlugin() {
         }
       }
 
-      sortable.animateAll(function () {
+      sortable.animateAll(() => {
         folding = false;
         initialFolding = false;
 
-        if (sortable.options.animation) {
+        if (this.options.animation) {
           multiDragElements.forEach(multiDragElement => {
             unsetRect(multiDragElement);
           });
         } // Remove all auxiliary multidrag items from el, if sorting enabled
 
 
-        if (sortable.options.sort) {
+        if (this.options.sort) {
           removeMultiDragElements();
         }
       });
@@ -3136,10 +3181,12 @@ function MultiDragPlugin() {
 
     dragOver({
       target,
-      completed
+      completed,
+      cancel
     }) {
       if (folding && ~multiDragElements.indexOf(target)) {
-        return completed(false);
+        completed(false);
+        cancel();
       }
     },
 
@@ -3161,7 +3208,7 @@ function MultiDragPlugin() {
           fromSortable.removeAnimationState(multiDragElement);
         });
         folding = false;
-        insertMultiDragElements(!sortable.options.removeCloneOnHide, rootEl);
+        insertMultiDragElements(!this.options.removeCloneOnHide, rootEl);
       }
     },
 
@@ -3173,7 +3220,7 @@ function MultiDragPlugin() {
       parentEl,
       putSortable
     }) {
-      let options = sortable.options;
+      let options = this.options;
 
       if (insertion) {
         // Clones must be hidden before folding animation to capture dragRectAbsolute properly
@@ -3261,7 +3308,7 @@ function MultiDragPlugin() {
     }) {
       let toSortable = putSortable || this.sortable;
       if (!evt) return;
-      let options = sortable.options,
+      let options = this.options,
           children = parentEl.children; // Multi-drag selection
 
       if (!dragStarted) {
@@ -3303,7 +3350,7 @@ function MultiDragPlugin() {
                 toggleClass(children[i], options.selectedClass, true);
                 multiDragElements.push(children[i]);
                 dispatchEvent({
-                  sortable: sortable,
+                  sortable,
                   rootEl,
                   name: 'select',
                   targetEl: children[i],
@@ -3409,7 +3456,7 @@ function MultiDragPlugin() {
       multiDragClones.length = 0;
     },
 
-    destroy() {
+    destroyGlobal() {
       this._deselectMultiDrag();
 
       off(document, 'pointerup', this._deselectMultiDrag);
@@ -3424,13 +3471,13 @@ function MultiDragPlugin() {
 
       if (multiDragSortable !== this.sortable) return; // Only deselect if target is not item in this sortable
 
-      if (evt && closest(evt.target, this.sortable.options.draggable, this.sortable.el, false)) return; // Only deselect if left click
+      if (evt && closest(evt.target, this.options.draggable, this.sortable.el, false)) return; // Only deselect if left click
 
       if (evt && evt.button !== 0) return;
 
       while (multiDragElements.length) {
         let el = multiDragElements[0];
-        toggleClass(el, this.sortable.options.selectedClass, false);
+        toggleClass(el, this.options.selectedClass, false);
         multiDragElements.shift();
         dispatchEvent({
           sortable: this.sortable,
@@ -3443,13 +3490,13 @@ function MultiDragPlugin() {
     },
 
     _checkKeyDown(evt) {
-      if (evt.key === this.sortable.options.multiDragKey) {
+      if (evt.key === this.options.multiDragKey) {
         this.multiDragKeyDown = true;
       }
     },
 
     _checkKeyUp(evt) {
-      if (evt.key === this.sortable.options.multiDragKey) {
+      if (evt.key === this.options.multiDragKey) {
         this.multiDragKeyDown = false;
       }
     }
@@ -3491,7 +3538,7 @@ function MultiDragPlugin() {
 
     },
 
-    eventOptions() {
+    eventProperties() {
       const oldIndicies = [],
             newIndicies = [];
       multiDragElements.forEach(multiDragElement => {
@@ -3541,7 +3588,7 @@ function MultiDragPlugin() {
 }
 
 function insertMultiDragElements(clonesInserted, rootEl) {
-  multiDragElements.forEach(multiDragElement => {
+  multiDragElements.forEach((multiDragElement, i) => {
     let target = rootEl.children[multiDragElement.sortableIndex + (clonesInserted ? Number(i) : 0)];
 
     if (target) {
@@ -3559,7 +3606,7 @@ function insertMultiDragElements(clonesInserted, rootEl) {
 
 
 function insertMultiDragClones(elementsInserted, rootEl) {
-  multiDragClones.forEach(clone => {
+  multiDragClones.forEach((clone, i) => {
     let target = rootEl.children[clone.sortableIndex + (elementsInserted ? Number(i) : 0)];
 
     if (target) {
